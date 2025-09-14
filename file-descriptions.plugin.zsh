@@ -220,16 +220,16 @@ lls() {
     local current_dir="$(/bin/pwd)"
     
     # 1% chance to run automatic cleanup
-    if (( RANDOM % 10 == 0 )); then
-    a   _desc_clean >/dev/null 2>&1
+    if (( RANDOM % 100 == 0 )); then
+        _desc_clean >/dev/null 2>&1
     fi
     
-    # Capture the entire ls output to a temp file first
-    local ls_temp="/tmp/ls_output_$$"
-    /bin/ls -la "$@" > "$ls_temp"
+    # Capture the colored ls output to a temp file first
+    local ls_temp="/tmp/ls_output_$"
+    /bin/ls -la --color=always "$@" > "$ls_temp"
     
     # Get descriptions for current directory
-    local desc_temp="/tmp/desc_lookup_$$"
+    local desc_temp="/tmp/desc_lookup_$"
     /usr/bin/touch "$desc_temp"
     
     # Build lookup file: filename|description
@@ -240,6 +240,11 @@ lls() {
         }' > "$desc_temp"
     fi
     
+    # Color codes for descriptions
+    local desc_color="\033[2;37m"    # Dim gray
+    local icon_color="\033[0;36m"    # Cyan
+    local reset="\033[0m"
+    
     # Now process the ls output and add descriptions
     while IFS= read -r line; do
         # Handle special lines (total, etc.)
@@ -248,11 +253,13 @@ lls() {
             continue
         fi
         
-        # Extract filename (last field after spaces)
-        local filename="${line##* }"
+        # Extract filename (strip ANSI codes for matching)
+        local filename_clean="${line##* }"
+        # Remove ANSI color codes to get clean filename
+        filename_clean=$(echo "$filename_clean" | sed 's/\x1b\[[0-9;]*m//g')
         
         # Skip . and .. entries  
-        if [[ "$filename" == "." ]] || [[ "$filename" == ".." ]]; then
+        if [[ "$filename_clean" == "." ]] || [[ "$filename_clean" == ".." ]]; then
             echo "$line"
             continue
         fi
@@ -260,14 +267,14 @@ lls() {
         # Look up description for this file
         local desc=""
         if [[ -s "$desc_temp" ]]; then
-            desc="$(/usr/bin/grep "^$filename|" "$desc_temp" 2>/dev/null | /usr/bin/cut -d'|' -f2-)"
+            desc="$(/usr/bin/grep "^$filename_clean|" "$desc_temp" 2>/dev/null | /usr/bin/cut -d'|' -f2-)"
         fi
         
         # Output line with or without description
         if [[ -n "$desc" ]]; then
             local icon="[F]"
-            [[ -d "$filename" ]] && icon="[D]"
-            printf "%-65s %s %s\n" "$line" "$icon" "$desc"
+            [[ -d "$filename_clean" ]] && icon="[D]"
+            printf "%-75s ${icon_color}%s${reset} ${desc_color}%s${reset}\n" "$line" "$icon" "$desc"
         else
             echo "$line"
         fi
