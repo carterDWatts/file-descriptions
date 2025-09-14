@@ -41,7 +41,7 @@ _desc_add() {
     echo "$path|$description" >> "$DESC_FILE.tmp"
     /bin/mv "$DESC_FILE.tmp" "$DESC_FILE"
     
-    echo "✓ Description added for: $(/usr/bin/basename "$path")"
+    echo "Description added for: $(/usr/bin/basename "$path")"
 }
 
 # Show specific description
@@ -65,7 +65,7 @@ _desc_remove() {
     if /usr/bin/grep -q "^$path|" "$DESC_FILE" 2>/dev/null; then
         /usr/bin/grep -v "^$path|" "$DESC_FILE" > "$DESC_FILE.tmp" 2>/dev/null
         /bin/mv "$DESC_FILE.tmp" "$DESC_FILE"
-        echo "✓ Description removed for: $(/usr/bin/basename "$path")"
+        echo "Description removed for: $(/usr/bin/basename "$path")"
     else
         echo "No description found for: $(/usr/bin/basename "$path")"
     fi
@@ -81,11 +81,14 @@ _desc_list() {
         return
     fi
     
-    # Simple approach - just use awk to format
+    # Show full path instead of just filename
     /usr/bin/awk -F'|' '{
         if (NF >= 2) {
-            gsub(/^.*\//, "", $1)  # Get just filename
-            icon = "📄"
+            icon = "[F]"
+            # Check if path is a directory (rough heuristic)
+            if (system("test -d \"" $1 "\"") == 0) {
+                icon = "[D]"
+            }
             print "  " icon " " $1 ": " $2
         }
     }' "$DESC_FILE"
@@ -108,7 +111,7 @@ _desc_search() {
         echo "$matches" | /usr/bin/awk -F'|' '{
             if (NF >= 2) {
                 gsub(/^.*\//, "", $1)  # Get just filename  
-                icon = "📄"
+                icon = "[F]"
                 print "  " icon " " $1 ": " $2
             }
         }'
@@ -140,7 +143,7 @@ _desc_clean() {
     }' "$DESC_FILE" > "$temp_clean"
     
     /bin/mv "$temp_clean" "$DESC_FILE"
-    echo "✓ Cleanup complete."
+    echo "Cleanup complete."
 }
 
 # Help
@@ -216,6 +219,11 @@ lls() {
     _desc_init
     local current_dir="$(/bin/pwd)"
     
+    # 1% chance to run automatic cleanup
+    if (( RANDOM % 10 == 0 )); then
+    a   _desc_clean >/dev/null 2>&1
+    fi
+    
     # Capture the entire ls output to a temp file first
     local ls_temp="/tmp/ls_output_$$"
     /bin/ls -la "$@" > "$ls_temp"
@@ -257,8 +265,8 @@ lls() {
         
         # Output line with or without description
         if [[ -n "$desc" ]]; then
-            local icon="📄"
-            [[ -d "$filename" ]] && icon="📁"
+            local icon="[F]"
+            [[ -d "$filename" ]] && icon="[D]"
             printf "%-65s %s %s\n" "$line" "$icon" "$desc"
         else
             echo "$line"
