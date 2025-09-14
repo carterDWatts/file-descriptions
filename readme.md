@@ -15,7 +15,7 @@ drwxr-xr-x 3 user user 4096 Sep 13 10:30 project/
 
 After:
 ```
--rw-r--r-- 1 user user 1234 Sep 13 10:30 script.sh                         [F] Backup script
+-rw-r--r-- 1 user user 1234 Sep 13 10:30 script.sh                        [F] Backup script
 -rw-r--r-- 1 user user  567 Sep 13 10:30 config.json                      [F] DB settings
 drwxr-xr-x 3 user user 4096 Sep 13 10:30 project/                         [D] Client work
 ```
@@ -37,7 +37,7 @@ lls                               # Enhanced ls with descriptions
 
 ### Oh My Zsh
 ```bash
-git clone https://github.com/yourusername/file-descriptions.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/file-descriptions
+git clone https://github.com/yourusername/file-descriptions.git ~/.oh-my-zsh/plugins/file-descriptions
 ```
 
 Add `file-descriptions` to your plugins list in `~/.zshrc`:
@@ -45,13 +45,13 @@ Add `file-descriptions` to your plugins list in `~/.zshrc`:
 plugins=(git file-descriptions)
 ```
 
-### Manual
+**Manual:**
 ```bash
-git clone https://github.com/yourusername/file-descriptions.git
-echo 'source /path/to/file-descriptions/file-descriptions.plugin.zsh' >> ~/.zshrc
+git clone https://github.com/yourusername/file-descriptions.git ~/file-descriptions
+echo 'source ~/file-descriptions/file-descriptions.plugin.zsh' >> ~/.zshrc
 ```
 
-Restart your shell.
+Restart your shell after installation.
 
 ## Examples
 
