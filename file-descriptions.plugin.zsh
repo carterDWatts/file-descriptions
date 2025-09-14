@@ -1,17 +1,17 @@
 #!/bin/zsh
 
-# Simple File Descriptions System
-# Version that doesn't mess with file descriptors or environment
+# File Descriptions Plugin
+# Adds descriptions to files and directories with enhanced ls
 
 DESC_FILE="$HOME/.file_descriptions"
 
 # Initialize description file if it doesn't exist
-_init() {
+_desc_init() {
     [[ ! -f "$DESC_FILE" ]] && /usr/bin/touch "$DESC_FILE"
 }
 
 # Get full path of a file/directory  
-_fullpath() {
+_desc_fullpath() {
     local item="$1"
     if [[ -d "$item" ]]; then
         (cd "$item" && /bin/pwd)
@@ -25,14 +25,14 @@ _fullpath() {
 }
 
 # Add description
-desc() {
+_desc_add() {
     if [[ $# -lt 2 ]]; then
-        echo "Usage: desc <file/dir> <description>"
+        echo "Usage: desc add <file/dir> <description>"
         return 1
     fi
     
-    _init
-    local path="$(_fullpath "$1")"
+    _desc_init
+    local path="$(_desc_fullpath "$1")"
     shift
     local description="$*"
     
@@ -44,17 +44,184 @@ desc() {
     echo "✓ Description added for: $(/usr/bin/basename "$path")"
 }
 
-# Enhanced ls with descriptions - INLINE VERSION (SAFE)
+# Show specific description
+_desc_show() {
+    local path="$(_desc_fullpath "${1:-.}")"
+    _desc_init
+    
+    local result="$(/usr/bin/grep "^$path|" "$DESC_FILE" 2>/dev/null | /usr/bin/head -1)"
+    if [[ -n "$result" ]]; then
+        echo "$(/usr/bin/basename "$path"): ${result#*|}"
+    else
+        echo "No description found for: $(/usr/bin/basename "$path")"
+    fi
+}
+
+# Remove description
+_desc_remove() {
+    local path="$(_desc_fullpath "${1:-.}")"
+    _desc_init
+    
+    if /usr/bin/grep -q "^$path|" "$DESC_FILE" 2>/dev/null; then
+        /usr/bin/grep -v "^$path|" "$DESC_FILE" > "$DESC_FILE.tmp" 2>/dev/null
+        /bin/mv "$DESC_FILE.tmp" "$DESC_FILE"
+        echo "✓ Description removed for: $(/usr/bin/basename "$path")"
+    else
+        echo "No description found for: $(/usr/bin/basename "$path")"
+    fi
+}
+
+# List all descriptions
+_desc_list() {
+    _desc_init
+    echo "All descriptions:"
+    
+    if [[ ! -s "$DESC_FILE" ]]; then
+        echo "  No descriptions found."
+        return
+    fi
+    
+    # Simple approach - just use awk to format
+    /usr/bin/awk -F'|' '{
+        if (NF >= 2) {
+            gsub(/^.*\//, "", $1)  # Get just filename
+            icon = "📄"
+            print "  " icon " " $1 ": " $2
+        }
+    }' "$DESC_FILE"
+}
+
+# Search descriptions
+_desc_search() {
+    local pattern="${1:-.*}"
+    _desc_init
+    
+    echo "Searching for: $pattern"
+    
+    if [[ ! -f "$DESC_FILE" ]]; then
+        echo "  No descriptions found."
+        return
+    fi
+    
+    local matches="$(/usr/bin/grep -i "$pattern" "$DESC_FILE" 2>/dev/null)"
+    if [[ -n "$matches" ]]; then
+        echo "$matches" | /usr/bin/awk -F'|' '{
+            if (NF >= 2) {
+                gsub(/^.*\//, "", $1)  # Get just filename  
+                icon = "📄"
+                print "  " icon " " $1 ": " $2
+            }
+        }'
+    else
+        echo "  No matches found."
+    fi
+}
+
+# Clean up descriptions for deleted files
+_desc_clean() {
+    _desc_init
+    
+    echo "Cleaning up descriptions for deleted files..."
+    local cleaned=0
+    local temp_clean="/tmp/desc_clean_$$"
+    /usr/bin/touch "$temp_clean"
+    
+    # Simple approach using awk
+    /usr/bin/awk -F'|' -v cleaned=0 '{
+        if (NF >= 2) {
+            # Test if file exists
+            if (system("test -e \"" $1 "\"") == 0) {
+                print $0
+            } else {
+                print "  Removing: " $1 > "/dev/stderr"
+                cleaned++
+            }
+        }
+    }' "$DESC_FILE" > "$temp_clean"
+    
+    /bin/mv "$temp_clean" "$DESC_FILE"
+    echo "✓ Cleanup complete."
+}
+
+# Help
+_desc_help() {
+    echo "File Descriptions Plugin"
+    echo "======================="
+    echo
+    echo "Usage: desc <command> [args...]"
+    echo
+    echo "Commands:"
+    echo "  add <file> <description>   - Add description to file/directory"
+    echo "  show [file]                - Show description for specific item"
+    echo "  remove [file]              - Remove description"
+    echo "  rm [file]                  - Alias for remove"
+    echo "  list                       - List all descriptions"
+    echo "  search <pattern>           - Search descriptions"
+    echo "  clean                      - Remove descriptions for deleted files"
+    echo "  help                       - Show this help"
+    echo
+    echo "Other commands:"
+    echo "  lls [options]              - Enhanced ls with descriptions"
+    echo
+    echo "Examples:"
+    echo "  desc add config.json 'Main configuration file'"
+    echo "  desc add ./docs 'Documentation folder'"
+    echo "  desc show config.json"
+    echo "  desc list"
+    echo "  desc search config"
+    echo "  lls"
+}
+
+# Main desc command with subcommands
+desc() {
+    case "$1" in
+        add)
+            shift
+            _desc_add "$@"
+            ;;
+        show)
+            shift
+            _desc_show "$@"
+            ;;
+        remove|rm)
+            shift
+            _desc_remove "$@"
+            ;;
+        list)
+            _desc_list
+            ;;
+        search)
+            shift
+            _desc_search "$@"
+            ;;
+        clean)
+            _desc_clean
+            ;;
+        help|--help|-h)
+            _desc_help
+            ;;
+        "")
+            _desc_help
+            ;;
+        *)
+            echo "Unknown command: $1"
+            echo "Run 'desc help' for usage information."
+            return 1
+            ;;
+    esac
+}
+
+# Enhanced ls with descriptions - kept as separate command
 lls() {
-    _init
+    _desc_init
     local current_dir="$(/bin/pwd)"
     
     # Capture the entire ls output to a temp file first
-    local ls_temp="/tmp/ls_output_$"
+    local ls_temp="/tmp/ls_output_$$"
     /bin/ls -la "$@" > "$ls_temp"
     
     # Get descriptions for current directory
-    local desc_temp="/tmp/desc_lookup_$"
+    local desc_temp="/tmp/desc_lookup_$$"
     /usr/bin/touch "$desc_temp"
     
     # Build lookup file: filename|description
@@ -102,128 +269,32 @@ lls() {
     /bin/rm -f "$ls_temp" "$desc_temp"
 }
 
-# Show specific description
-showdesc() {
-    local path="$(_fullpath "${1:-.}")"
-    _init
+# Add completion support
+if command -v compdef >/dev/null 2>&1; then
+    _desc_completion() {
+        local -a subcommands
+        subcommands=(
+            'add:Add description to file/directory'
+            'show:Show description for specific item'
+            'remove:Remove description'
+            'rm:Remove description (alias)'
+            'list:List all descriptions'
+            'search:Search descriptions'
+            'clean:Remove descriptions for deleted files'
+            'help:Show help'
+        )
+        
+        if (( CURRENT == 2 )); then
+            _describe 'commands' subcommands
+        elif (( CURRENT >= 3 )); then
+            case "$words[2]" in
+                add|show|remove|rm)
+                    _files
+                    ;;
+            esac
+        fi
+    }
     
-    local result="$(/usr/bin/grep "^$path|" "$DESC_FILE" 2>/dev/null | /usr/bin/head -1)"
-    if [[ -n "$result" ]]; then
-        echo "$(/usr/bin/basename "$path"): ${result#*|}"
-    else
-        echo "No description found for: $(/usr/bin/basename "$path")"
-    fi
-}
-
-# Remove description
-rmdesc() {
-    local path="$(_fullpath "${1:-.}")"
-    _init
-    
-    if /usr/bin/grep -q "^$path|" "$DESC_FILE" 2>/dev/null; then
-        /usr/bin/grep -v "^$path|" "$DESC_FILE" > "$DESC_FILE.tmp" 2>/dev/null
-        /bin/mv "$DESC_FILE.tmp" "$DESC_FILE"
-        echo "✓ Description removed for: $(/usr/bin/basename "$path")"
-    else
-        echo "No description found for: $(/usr/bin/basename "$path")"
-    fi
-}
-
-# List all descriptions
-listdesc() {
-    _init
-    echo "All descriptions:"
-    
-    if [[ ! -s "$DESC_FILE" ]]; then
-        echo "  No descriptions found."
-        return
-    fi
-    
-    # Simple approach - just use awk to format
-    /usr/bin/awk -F'|' '{
-        if (NF >= 2) {
-            gsub(/^.*\//, "", $1)  # Get just filename
-            icon = "📄"
-            print "  " icon " " $1 ": " $2
-        }
-    }' "$DESC_FILE"
-}
-
-# Search descriptions
-finddesc() {
-    local pattern="${1:-.*}"
-    _init
-    
-    echo "Searching for: $pattern"
-    
-    if [[ ! -f "$DESC_FILE" ]]; then
-        echo "  No descriptions found."
-        return
-    fi
-    
-    local matches="$(/usr/bin/grep -i "$pattern" "$DESC_FILE" 2>/dev/null)"
-    if [[ -n "$matches" ]]; then
-        echo "$matches" | /usr/bin/awk -F'|' '{
-            if (NF >= 2) {
-                gsub(/^.*\//, "", $1)  # Get just filename  
-                icon = "📄"
-                print "  " icon " " $1 ": " $2
-            }
-        }'
-    else
-        echo "  No matches found."
-    fi
-}
-
-# Clean up descriptions for deleted files
-cleandesc() {
-    _init
-    
-    echo "Cleaning up descriptions for deleted files..."
-    local cleaned=0
-    local temp_clean="/tmp/desc_clean_$$"
-    /usr/bin/touch "$temp_clean"
-    
-    # Simple approach using awk
-    /usr/bin/awk -F'|' -v cleaned=0 '{
-        if (NF >= 2) {
-            # Test if file exists
-            if (system("test -e \"" $1 "\"") == 0) {
-                print $0
-            } else {
-                print "  Removing: " $1 > "/dev/stderr"
-                cleaned++
-            }
-        }
-    }' "$DESC_FILE" > "$temp_clean"
-    
-    /bin/mv "$temp_clean" "$DESC_FILE"
-    echo "✓ Cleanup complete."
-}
-
-# Help
-helpdesc() {
-    echo "File Descriptions - Simple version"
-    echo "=================================="
-    echo
-    echo "Commands:"
-    echo "  desc <file> <description>   - Add description to file/directory"
-    echo "  lls [options]              - List directory with descriptions"
-    echo "  showdesc [file]            - Show description for specific item"
-    echo "  rmdesc [file]              - Remove description"
-    echo "  listdesc                   - List all descriptions"
-    echo "  finddesc <pattern>         - Search descriptions"
-    echo "  cleandesc                  - Remove descriptions for deleted files"
-    echo "  helpdesc                   - Show this help"
-    echo
-    echo "Examples:"
-    echo "  desc config.json 'Main configuration file'"
-    echo "  desc ./docs 'Documentation folder'"
-    echo "  lls"
-    echo "  finddesc config"
-}
-
-# Show help if script is run directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]] || [[ "${(%):-%x}" == "${0}" ]]; then
-    helpdesc
+    compdef _desc_completion desc
+    compdef _files lls
 fi
